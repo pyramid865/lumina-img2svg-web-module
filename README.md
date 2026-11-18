@@ -1,36 +1,69 @@
 # community.img2svg.web — Lumina Workshop 纯前端模块
 
 把插画描摹成 **Lumina 叠色 3D 打印版画**用的分层色块 SVG——
-**纯前端模块**（manifest v1 / Workshop API 1.0.0），描摹引擎
-vtracer 以 WebAssembly 形式内嵌在模块 UI 里，**全部计算在浏览器内
-本地完成**，不上传任何图片，也不需要模块后端。
+**纯前端模块**（manifest v1 / Workshop API 1.0.0），描摹引擎为**纯 JavaScript**，
+**全部计算在浏览器内本地完成**，不上传任何图片，也不需要模块后端。
 
 与已登记的后端版模块 `community.img2svg`（v0.1.3，Python 后端）互补：
 本模块可以在**任何支持 Workshop API 1.0.0 的 Lumina 版本**上直接安装运行。
 
+## 为什么用纯 JS 而不是 WebAssembly
+
+早期版本内嵌 vtracer 的 WASM，但工坊宿主的内容安全策略（CSP）不允许编译
+WASM（缺 `wasm-unsafe-eval`），导致脚本在顶层初始化 WASM 时被拦截、
+SDK 的 `lifecycle.ready()` 永远发不出、模块停在"正在连接宿主"。
+
+现版本改用**自研的纯 JS 分层描色引擎**，**不调用任何 WebAssembly API**，
+因此能在现有工坊的默认安全设置下正常启动、选图、描摹并交接——无需用户
+调整任何安全设置。已在真实 Chromium + 工坊同款严格 CSP 下端到端验证：
+ready → 选图 → 转换 → 交接 全链路通过。
+
 ## 下载
 
-从本仓库的 [Releases](../../releases) 页面下载 `community.img2svg-web-0.1.0.lumina-workshop`，
-通过 Lumina Workshop 安装。
+从本仓库的 [Releases](../../releases) 页面下载
+`community.img2svg.web-0.1.3.lumina-workshop`，通过 Lumina Workshop 安装。
+
+> 0.1.0 在工坊里卡在"正在连接宿主"（WASM 被 CSP 拦截）；
+> 0.1.1 换成 imagetracerjs 过渡引擎，能跑但碎点很多；
+> **0.1.2 / 0.1.3 换成自研描色引擎**，色块干净、边缘平滑、路径数量收敛。
+> 0.1.0 / 0.1.1 的用户请升级到 0.1.3。
 
 ## 画质档位
 
-全自动参数，对应桌面版 **v7.5.6** 画质档（从桌面版核心提取确认）：
+全自动参数，无用户选项。描摹管线（全部纯 JavaScript）：
+
+1. 3×3 中值去噪，去掉压缩噪点（排序网络取中值，不糊边）
+2. Lab 色彩空间加权 k-means 量化（128 色、6 位直方图；确定性种子，同一张图结果完全一致）
+3. 去孤立点，按面积从大到小叠色
+4. marching squares 提取闭合轮廓（亚像素精度）
+5. **亚像素边缘吸附**：把顶点沿法向推到原图颜色过渡的中点，消掉半像素系统偏移
+6. **最小二乘贝塞尔拟合**（potrace 思路）：直线段与曲线段分开拟合，误差超限处切分
+7. 同色描边 1px，填掉相邻色块因独立拟合产生的细缝
 
 | 参数 | 值 |
 |---|---|
-| 颜色量化 | 128 色（vtracer 内建量化） |
+| 颜色量化 | 128 色（Lab 空间 k-means） |
 | 工作网格 | 1600px |
-| 曲线拟合 | spline |
-| 分层方式 | stacked（叠色打印友好） |
-| 斑点过滤 | filter_speckle 4 |
-| 色彩精度 | color_precision 6 |
-| 层差阈值 | layer_difference 16 |
+| 预简化容差 | 0.4 px |
+| 曲线拟合容差 | 1.5 px |
+| 小色块过滤 | 不丢弃（删块会在画面留洞） |
+| 分层方式 | 按面积叠色 |
+| 边缘处理 | 亚像素吸附 + 1px 同色描边 |
+| 透明处理 | 填白后描摹 |
+
+> 画质（同一张 683×916 插画，与原图逐像素比）：
+>
+> | 版本 | 平均色差 | 边缘带色差 | 路径数 | 体积 |
+> |---|---|---|---|---|
+> | 内嵌 WASM 的 vtracer | 9.90 | 34.1 | 2,941 | 2.0 MB |
+> | imagetracerjs 过渡版 | 14.12 | — | 7,557 | 1.4 MB |
+> | **本版自研引擎** | **7.52** | **28.0** | **126** | **1.0 MB** |
+>
+> 边缘带色差比 vtracer 低 18%，路径数少 95%，体积少 50%；
+> 路径数量比过渡版减少 98%，色块是整块的、边缘是拟合出的平滑曲线。
 
 ## 许可证
 
 - 模块自身代码：MIT（见 `LICENSE` 上半部分）
 - UI 内嵌的 `@lumina/workshop-sdk`：GPL-3.0-or-later，其声明与完整
   许可证文本见 `LICENSE` 下半部分
-- 描摹引擎 vtracer（wasm）：MIT OR Apache-2.0（经由 `@buzz-dee/vtrace`，
-  MIT）

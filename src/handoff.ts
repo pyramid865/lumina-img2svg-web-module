@@ -1,4 +1,5 @@
 import type { WorkshopImageHandoff } from "@lumina/workshop-sdk";
+import { TRACE_CONFIG } from "./config.ts";
 import { MODULE_ID, MODULE_VERSION } from "./version.ts";
 
 // Conservative print size at 300 dpi; the host re-validates everything we send.
@@ -61,7 +62,17 @@ export function buildHandoffRequest(
       moduleVersion: MODULE_VERSION,
       projectSchemaVersion: ctx.projectSchema,
       renderSchemaVersion: ctx.renderSchema,
-      payload: { source: result.inputName, engine: "vtracer-wasm", colors: 128, gridWidth: 1600 },
+      payload: {
+        source: result.inputName,
+        engine: "layered-js",
+        colors: TRACE_CONFIG.colors,
+        simplify: TRACE_CONFIG.simplify,
+        fitTol: TRACE_CONFIG.fitTol,
+        snap: TRACE_CONFIG.snap,
+        stroke: TRACE_CONFIG.stroke,
+        minArea: TRACE_CONFIG.minArea,
+        gridWidth: TRACE_CONFIG.gridWidth,
+      },
     },
   };
 }

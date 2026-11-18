@@ -27,7 +27,13 @@ def main() -> int:
     version = manifest["version"]
     module_id = manifest["id"]
     OUT.mkdir(exist_ok=True)
-    asset = OUT / f"{module_id.replace('.', '-')}-{version}.lumina-workshop"
+    # Registry 规则：assetName 必须是 "{moduleId}-{version}.lumina-workshop"，
+    # moduleId 里的点号原样保留（community.img2svg.web-0.1.1…）。
+    # 早期版本错误地把 moduleId 的点号换成连字符，
+    # 与 registry 的 assetName 规则不符（会被 inspect_package 打回）。
+    asset = OUT / f"{module_id}-{version}.lumina-workshop"
+    expected = f"{module_id}-{version}.lumina-workshop"
+    assert asset.name == expected, f"assetName 不符合 registry 规则: {asset.name}"
 
     missing = [m for m in MEMBERS if not (ROOT / m).exists()]
     if missing:
