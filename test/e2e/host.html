@@ -1,0 +1,106 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>E2E HOST</title>
+<style>body{font:13px sans-serif;padding:12px}iframe{width:420px;height:560px;border:1px solid #ccc}
+#log{white-space:pre-wrap;font:12px monospace;background:#f6f6f6;padding:8px}</style></head>
+<body>
+<h3>模拟 Lumina 工坊宿主（严格 CSP iframe）</h3>
+<div id="result">等待模块就绪…</div>
+<iframe id="module" src="/module.html"></iframe>
+<div id="log"></div>
+<script>
+const RESULT = document.getElementById('result');
+const LOG = document.getElementById('log');
+function log(s){ LOG.textContent += s + '\n'; console.log('[HOST] '+s); }
+function done(s){ RESULT.textContent = s; document.title = 'DONE::'+s; log('DONE: '+s); }
+function fail(s){ RESULT.textContent = 'FAIL: '+s; document.title = 'FAIL::'+s; log('FAIL: '+s); }
+
+const RPC_VERSION = 1;
+const frame = document.getElementById('module');
+let modulePort = null;
+
+// 合成一张测试图 PNG（红圆+蓝块+米底），用 canvas 生成，作为 image.pick 的返回。
+function makeTestPng(){
+  const c = document.createElement('canvas'); c.width=160; c.height=120;
+  const x = c.getContext('2d');
+  x.fillStyle='#f0e2cf'; x.fillRect(0,0,160,120);
+  x.fillStyle='#dc3c3c'; x.beginPath(); x.arc(55,60,38,0,7); x.fill();
+  x.fillStyle='#2850c8'; x.fillRect(90,25,50,70);
+  return new Promise(r=>c.toBlob(b=>b.arrayBuffer().then(r),'image/png'));
+}
+
+window.addEventListener('message', async (event) => {
+  const data = event.data;
+  if (!data || data.type !== 'lumina.workshop.ready'){
+    log('other msg: '+JSON.stringify(data).slice(0,120)); return;
+  }
+  log('ready from module: id='+data.moduleId+' ver='+data.moduleVersion+' api='+data.apiVersion);
+  window.__ready = data;
+
+  // 建 MessageChannel，把 modulePort 转移给 iframe
+  const ch = new MessageChannel();
+  modulePort = ch.port1;
+  frame.contentWindow.postMessage(
+    { type:'lumina.workshop.connect', sessionId:'e2e-session' },
+    '*', [ch.port2]
+  );
+
+  // 等待模块发 ready 后，自动驱动 UI：点击"选择图片并转换"→"交接"
+  const doc = frame.contentDocument;
+  let convertClicked = false;
+  const drive = setInterval(() => {
+    try {
+      const d = frame.contentDocument;
+      const convert = d.getElementById('convert');
+      const handoff = d.getElementById('handoff');
+      const status = d.getElementById('status');
+      if (convert && !convert.disabled && !convertClicked){
+        convertClicked = true;
+        log('click convert; status='+(status?status.textContent:'?'));
+        convert.click();
+      }
+      if (convertClicked && handoff && !handoff.disabled){
+        clearInterval(drive);
+        log('click handoff; status='+(status?status.textContent:'?'));
+        handoff.click();
+        setTimeout(()=>{
+          const st = frame.contentDocument.getElementById('status');
+          if (window.__handoff && st && st.textContent.includes('已交接')){
+            done('E2E_PASS ready+convert+handoff | api='+(window.__ready?.apiVersion));
+          } else {
+            fail('handoff status='+(st?st.textContent:'?')+' handoffData='+!!window.__handoff);
+          }
+        }, 800);
+      }
+    } catch(e){ log('drive err: '+e.message); }
+  }, 250);
+  setTimeout(()=>{ clearInterval(drive); if(document.title.indexOf('DONE')<0 && document.title.indexOf('FAIL')<0) fail('timeout waiting for UI flow'); }, 30000);
+
+  modulePort.onmessage = async (ev) => {
+    const req = ev.data;
+    if (!req || req.kind !== 'request') return;
+    log('rpc: '+req.method);
+    let result;
+    if (req.method === 'ui.getState'){
+      result = { locale:'zh-CN', theme:'light', tokens:{} };
+    } else if (req.method === 'image.pick'){
+      result = { name:'e2e-test.png', mimeType:'image/png', bytes: await makeTestPng() };
+    } else if (req.method === 'colorLibrary.read'){
+      result = { id:'lib-e2e' };
+    } else if (req.method === 'handoff.image'){
+      // 校验交接字段
+      const p = req.payload;
+      log('handoff paths='+(p.pngBytes?.byteLength)+' svg='+(p.svgBytes?.byteLength)+
+          ' projectId='+p.projectId+' engine='+(p.recipeSource?.payload?.engine||'?'));
+      window.__handoff = p;
+      result = { status:'completed' };
+    } else {
+      result = {};
+    }
+    modulePort.postMessage({
+      protocol:'lumina-workshop-rpc', version:RPC_VERSION, kind:'response',
+      requestId:req.requestId, ok:true, result
+    });
+  };
+  modulePort.start();
+}, false);
+</script>
+</body></html>

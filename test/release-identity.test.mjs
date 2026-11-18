@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const html = readFileSync(path.join(root, "ui/index.html"), "utf8");
 const manifest = JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8"));
+const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+const packScript = readFileSync(path.join(root, "scripts/package_archive.py"), "utf8");
 
 function extractInlineScript(htmlText) {
   const m = htmlText.match(/<script>([\s\S]*)<\/script>/);
@@ -136,18 +138,33 @@ test("ready 身份与 manifest 一致且上报 API 1.0.0（纯前端）", async 
   }
 });
 
-test("manifest 是 v1 纯前端形态且无 backend 字段", () => {
-  assert.equal(manifest.manifestVersion, 1);
+test("版本号在 manifest 与 package.json 之间一致，且资产名符合 registry 规则", () => {
+  // 发布踩过的两个坑：①版本只改了 package.json、manifest 还是旧的；
+  // ②打包脚本把 moduleId 的点号换成连字符，registry 的 inspect_package 直接打回。
+  assert.equal(pkg.version, manifest.version, "package.json 与 manifest.json 版本必须一致");
+  assert.ok(!/module_id\.replace/.test(packScript),
+    "打包脚本不得把 moduleId 的点号替换成连字符（assetName 必须是 {moduleId}-{version}）");
+  assert.ok(packScript.includes('f"{module_id}-{version}.lumina-workshop"'),
+    "打包脚本必须用 {moduleId}-{version}.lumina-workshop 命名");
+});
+
+test("manifest 是 v1 纯前端形态且无 backend 字段", () => {  assert.equal(manifest.manifestVersion, 1);
   assert.equal(manifest.workshopApi.min, "1.0.0");
   assert.ok(manifest.entrypoints.ui, "v1 必须声明 ui 入口");
   assert.ok(!("backend" in manifest), "纯前端 manifest 不得声明 backend");
   assert.equal(manifest.id, "community.img2svg.web");
 });
 
-test("构建产物内嵌 wasm 引擎与 7.5.6 档参数", () => {
-  // @buzz-dee/vtrace embeds its wasm payload as base64 inside the JS.
-  assert.ok(html.length > 300_000, "bundle 应包含内嵌 wasm（>300KB）");
-  assert.ok(/AGFzbQ/.test(html), "应含 base64 wasm 魔数（AGFzbQ = \\0asm）");
-  assert.ok(html.includes("color-cluster"), "应配置彩色聚类");
-  assert.ok(html.includes('"stacked"'), "应配置 stacked 叠色");
+test("构建产物为纯 JS 引擎，无 WASM（工坊 CSP 可运行）", () => {
+  // 关键回归：绝不能出现 WebAssembly 编译，否则工坊 CSP 会拦截、
+  // lifecycle.ready() 发不出、模块卡在"正在连接宿主"。
+  assert.ok(!html.includes("new WebAssembly.Module"),
+    "bundle 不得包含顶层 WASM 编译（WebAssembly.Module）");
+  assert.ok(!/AGFzbQ/.test(html), "bundle 不得内嵌 base64 wasm 魔数（\\0asm）");
+  assert.ok(!html.includes("WebAssembly.instantiate"), "bundle 不得实例化 WASM");
+  // 纯 JS 描摹引擎与配置确实被打进产物
+  assert.ok(html.includes("imagetracerjs") || html.includes("imagedataToSVG"),
+    "bundle 应包含纯 JS 描摹引擎");
+  assert.ok(html.includes("pathomit"), "应配置去噪参数 pathomit");
+  assert.ok(html.includes("numberofcolors"), "应配置颜色数量参数");
 });

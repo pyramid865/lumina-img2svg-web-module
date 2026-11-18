@@ -1,24 +1,14 @@
-import { VTrace, type VTraceOptions } from "@buzz-dee/vtrace";
 import { applyWorkshopUiState, connectWorkshop } from "@lumina/workshop-sdk";
 import { buildHandoffRequest, newConversion, type ConversionResult } from "./handoff.ts";
+import { traceToSvg } from "./trace.ts";
+import { TRACE_CONFIG } from "./config.ts";
 import { MODULE_ID, MODULE_VERSION } from "./version.ts";
 
 const PROJECT_SCHEMA = `${MODULE_ID}/v1`;
 const RENDER_SCHEMA = `${MODULE_ID}-render/v1`;
 
-// v7.5.6-style quality profile (extracted from the desktop build's core):
-// 128-color quantisation, 1600px working grid, same vtracer parameter family.
-const GRID_WIDTH = 1600;
-const TRACE_OPTS: VTraceOptions = {
-  colorMode: "color",
-  clustering: "color-cluster",
-  hierarchical: "stacked",
-  mode: "spline",
-  filterSpeckle: 4,
-  colorPrecision: 6,
-  layerDifference: 16,
-  maxColors: 128,
-};
+// 工作网格宽度统一取自 TRACE_CONFIG；描摹引擎为纯 JS（工坊 CSP 下可用）。
+const GRID_WIDTH = TRACE_CONFIG.gridWidth;
 
 const statusEl = document.getElementById("status") as HTMLElement;
 const convertBtn = document.getElementById("convert") as HTMLButtonElement;
@@ -55,22 +45,11 @@ async function decodeToCanvas(
   return { canvas, width, height };
 }
 
-/** Trace canvas pixels into a layered flat-colour SVG document string. */
+/** Trace canvas pixels into a layered flat-colour SVG document string (pure JS). */
 function traceCanvas(canvas: HTMLCanvasElement): string {
   const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const vtrace = new VTrace(imageData, TRACE_OPTS);
-  // Use the raw wasm output (multi-path, per-layer fill colours). The wrapper's
-  // own getSVG() collapses everything into a single black path — do not use it.
-  const inner = vtrace as unknown as {
-    _ensureProcessed(): void;
-    _pathData: string;
-  };
-  inner._ensureProcessed();
-  const raw = inner._pathData;
-  return raw
-    .replace(/<\?xml[^>]*\?>\s*/, "")
-    .replace(/<!--[\s\S]*?-->\s*/, "");
+  return traceToSvg(imageData);
 }
 
 async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<ArrayBuffer> {
@@ -113,8 +92,8 @@ async function main(): Promise<void> {
         picked.mimeType,
       );
 
-      setStatus(`正在描摹（${width}×${height}，全自动 7.5.6 档）…`);
-      progressEl.textContent = "浏览器内运行 vtracer 引擎，请稍候";
+      setStatus(`正在描摹（${width}×${height}，全自动档）…`);
+      progressEl.textContent = "浏览器内本地描摹，请稍候";
       await new Promise((r) => setTimeout(r, 30)); // let the UI paint
       const svgText = traceCanvas(canvas);
 

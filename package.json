@@ -1,8 +1,8 @@
 {
   "name": "lumina-img2svg-web-module",
   "private": true,
-  "version": "0.1.0",
-  "description": "Image to SVG - frontend-only Lumina Workshop module (browser-side vtracer wasm)",
+  "version": "0.1.1",
+  "description": "Image to SVG - frontend-only Lumina Workshop module (pure-JS tracer, no WASM, CSP-safe)",
   "license": "MIT",
   "author": "pyramid17",
   "type": "module",
@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@lumina/workshop-sdk": "https://github.com/lumina-layer-studio/Lumina-Workshop-SDK/releases/download/v1.1.0/lumina-workshop-sdk-1.1.0.tgz",
-    "@buzz-dee/vtrace": "2.0.0-0"
+    "imagetracerjs": "1.2.6"
   },
   "devDependencies": {
     "esbuild": "0.25.10"

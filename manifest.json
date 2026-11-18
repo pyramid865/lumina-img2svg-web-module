@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "community.img2svg.web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "name": {
     "zh-CN": "图片转 SVG（网页版）",
     "en-US": "Image to SVG (Web)"
