@@ -1,0 +1,38 @@
+{
+  "manifestVersion": 1,
+  "id": "community.img2svg.web",
+  "version": "0.1.0",
+  "name": {
+    "zh-CN": "图片转 SVG（网页版）",
+    "en-US": "Image to SVG (Web)"
+  },
+  "description": {
+    "zh-CN": "在浏览器内把插画描摹成叠色 3D 打印版画用的分层色块 SVG，全自动参数",
+    "en-US": "Trace illustrations into layered flat-color SVG for Lumina relief printing, fully automatic"
+  },
+  "publisher": "pyramid17",
+  "workshopApi": {
+    "min": "1.0.0",
+    "maxExclusive": "2.0.0"
+  },
+  "luminaVersion": {
+    "min": "2.0.0"
+  },
+  "entrypoints": {
+    "ui": "ui/index.html"
+  },
+  "permissions": [
+    {
+      "name": "image.pick",
+      "reason": "选择要描摹的原图"
+    },
+    {
+      "name": "color-library.read",
+      "reason": "交接时读取当前色库标识"
+    },
+    {
+      "name": "handoff.image",
+      "reason": "将描摹完成的 PNG/SVG 交给 Lumina 转换器"
+    }
+  ]
+}
